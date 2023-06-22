@@ -456,4 +456,83 @@ POST /_search
          }
       }
    ]
+} 
+
+ElasticSearch script yazma işlemi ve aggregation
+elastiksearchde queryler yazıldıktan sonra aggregation ekleyerek script yazılır. scripted_metric süreci şöyle işler
+
+* init_script
+contructer gibi düşünülebilir, burada state verisi elastiğin içinde bulunan hashmap ve biz ona .a veya b diyerek bir parametre atıyoruz.
+* map_script
+Tek bir node için aramamız nasıl bir döngüye gireceğiz onu belirtiyoruz. doc dediğimiz bir dokümanın içerisindeki veri, loop için ise params ve source işlemi kullanılıyor ve key value bilgileri alınıyor.
+* combine_script
+map scripte aldığımız veriyi dönüyoruz.
+* reduce_script
+Bütün nodeların içerisini burada dönüyoruz. İç içe for yapıyormuşuz gibi düşünebiliriz. Burada states dediğimiz yapı her bir node u kast ediyor.
+
+GET mes_production_quality/_search
+{
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "bool": {
+            "must": [
+              {
+                "term": {
+                  "Id": {
+                    "value": ""
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "terms": {
+            "id": [
+              (idler)
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "size": 0,
+  "track_total_hits": false, 
+  "aggs": {
+    "custom_aggregations": {
+      "scripted_metric": {
+        "init_script": {
+          "source": "state.b = new HashMap();"
+        },
+        "map_script": {
+          "source": """
+          if(params._source.productionQualityCustom.size() > 0)
+          {
+            for(production in params._source.productionQualityCustom)
+            {
+              String key = doc[''].value + "!"+ doc[''].value+ "!"+ doc[''].value + "!"+ doc[''].value + "!"+ doc[''].value + "!" + doc['.keyword'].value+ "!" + doc[''].value + "!"+ doc[''].value + "!"+ doc[''].value+"!"+ doc[''].value+ "!"+doc[''].value + "!" + production.key+ "*"+production.value +";" ;
+                if(state.b[key] == null){state.b[key] = 1;}
+            }
+          }
+          else
+          {
+            String key = doc[''].value + "!"+ doc[''].value+ "!"+ doc[''].value + "!"+ doc[''].value + "!"+ doc[''].value + "!" + doc[''].value+ "!" + doc[''].value + "!"+ doc[''].value + "!"+ doc[''].value+"!"+ doc[''].value+ "!"+doc[''].value + ";" ;
+                if(state.b[key] == null){state.b[key] = 1;}
+          }
+          """
+        },
+        "combine_script": {
+          "source": "return state.b;"
+        },
+        "reduce_script": {
+          "source": """
+          Map c = new HashMap();for(minimap in states){if(minimap.isEmpty() == false){for(mapkey in minimap.entrySet()){String key = mapkey.getKey();if(c[key]==null){c[key] = 1;}}}}return c.keySet();
+          """
+        }
+      }
+    }
+  }
 }
+
